@@ -1,0 +1,129 @@
+#!/bin/bash
+
+# Константы в верхнем регистре
+readonly TIPS_FILE=~/.command_tips
+readonly HISTORY_FILE=~/.bash_history
+readonly VERSION="1.2"
+
+# Инициализация файла подсказок
+init_tips_file() {
+    [ ! -f "$TIPS_FILE" ] && touch "$TIPS_FILE"
+}
+
+# Вывод цветного сообщения
+print_message() {
+    local color=$1; shift
+    case $color in
+        red)    echo -e "\033[31m$*\033[0m" ;;
+        green)  echo -e "\033[32m$*\033[0m" ;;
+        yellow) echo -e "\033[33m$*\033[0m" ;;
+        *)      echo -e "$*" ;;
+    esac
+}
+
+print_help() {
+    echo "Command Tips Manager v$VERSION"
+    echo "Использование:"
+    echo "  tips -a 'подсказка' ['комментарий']  Добавить подсказку"
+    echo "  tips -s 'ключевое слово'             Поиск подсказок"
+    echo "  tips -l                              Список всех подсказок"
+    echo "  tips -c                              Очистить все подсказки"
+    echo "  tips -h                              Справка"
+    echo "  tips -v                              Версия"
+    echo
+    echo "Расширенные флаги:"
+    echo "  --clear    Очистка всех подсказок"
+    echo "  --list     Показать все подсказки"
+    echo "  --help     Показать справку"
+    echo "  --count    Показать количество подсказок"
+    echo
+    echo "Файл подсказок: $TIPS_FILE"
+    echo "Всего подсказок: $(count_tips)"
+}
+
+count_tips() {
+    wc -l < "$TIPS_FILE" | tr -d ' '
+}
+
+clear_tips() {
+    > "$TIPS_FILE"
+    print_message green "Все подсказки удалены"
+}
+
+search_tips() {
+    local keyword="$1"
+    if [ -z "$keyword" ]; then
+        print_message red "Ошибка: Не указано ключевое слово для поиска"
+        return 1
+    fi
+    
+    grep -i --color=always "$keyword" "$TIPS_FILE" || \
+        print_message yellow "Подсказки по запросу '$keyword' не найдены"
+}
+
+list_tips() {
+    if [ ! -s "$TIPS_FILE" ]; then
+        print_message yellow "Файл подсказок пуст"
+        return
+    fi
+    
+    print_message green "Список всех подсказок:"
+    nl -w2 -s ". " "$TIPS_FILE"
+}
+
+add_tip() {
+    local tip="$1"
+    local comment="${2:-Без комментария}"
+    
+    if [ -z "$tip" ]; then
+        print_message red "Ошибка: Не указана подсказка"
+        return 1
+    fi
+    
+    echo "$tip | $comment" >> "$TIPS_FILE"
+    print_message green "Добавлено: '$tip' (Комментарий: $comment)"
+}
+
+get_last_command() {
+    tail -n 1 "$HISTORY_FILE" 2>/dev/null || echo "Не удалось получить последнюю команду"
+}
+
+# Основная логика
+main() {
+    init_tips_file
+    
+    local tip comment
+    
+    while getopts ":a:c:s:lchvj" opt; do
+        case $opt in
+            a) tip="$OPTARG" ;;
+            c) clear_tips; exit 0 ;;
+            s) search_tips "$OPTARG"; exit 0 ;;
+            l) list_tips; exit 0 ;;
+            h) print_help; exit 0 ;;
+            v) echo "Command Tips Manager v$VERSION"; exit 0 ;;
+            j) tip="$(get_last_command)" ;;
+            \?) print_message red "Неверный флаг: -$OPTARG"; print_help; exit 1 ;;
+            :) print_message red "Опция -$OPTARG требует аргумент"; print_help; exit 1 ;;
+        esac
+    done
+    
+    shift $((OPTIND-1))
+    
+    # Обработка длинных флагов
+    case "$1" in
+        --clear) clear_tips ;;
+        --list) list_tips ;;
+        --help) print_help ;;
+        --count) echo "Всего подсказок: $(count_tips)" ;;
+        --*) print_message red "Неизвестный флаг: $1"; print_help; exit 1 ;;
+    esac
+    
+    # Добавление подсказки (если указана)
+    [ -n "$tip" ] && add_tip "$tip" "$comment"
+    
+    # Если не передано ни одного аргумента
+    [ $OPTIND -eq 1 ] && print_help
+}
+
+main "$@"
