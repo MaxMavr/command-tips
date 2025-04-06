@@ -9,43 +9,299 @@ source "$(dirname "$0")/../lib/interface_tips.sh"
 main() {
     init_db
     
-    local tip comment
-    
-    while getopts ":a:c:s:lchvj" opt; do
-        case $opt in
-            a) 
-                tip="$OPTARG"
-                shift $((OPTIND-1))
-                comment="$*"
-                OPTIND=1
-                ;;
-            s) search_tips "$OPTARG"; exit 0 ;;
-            l) list_tips; exit 0 ;;
-            h) print_help; exit 0 ;;
-            v) echo "Command Tips v$VERSION"; exit 0 ;;
-            j) tip="$(get_last_command)" ;;
+    local command=""
+    local comment=""
+    local tags=""
 
-            \?) print_message red "Неверный флаг: -$OPTARG"; print_help; exit 1 ;;
-            :) print_message red "Опция -$OPTARG требует аргумент"; print_help; exit 1 ;;
+    local search_query=""
+    local filter_all_tags=""
+    local filter_any_tags=""
+
+    local remove_tags_num=""
+    local remove_tags=""
+
+    local edit_num=""
+    local delete_num=""
+    local insert_num=""
+    local copy_num=""
+    local info_num=""
+
+    # Разбор аргументов
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -l|--list)
+                list_tips
+                exit 0
+                ;;
+            
+            -c|--clear)
+                clear_tips
+                exit 0
+                ;;
+            
+            -v|--version)
+                print_version
+                exit 0
+                ;;
+            
+            -h|--help)
+                print_help
+                exit 0
+                ;;
+            
+            --count)
+                print_msg "Всего записей: $(count_tips)"
+                exit 0
+                ;;
+            
+            -a|--add)
+                if [[ $# -lt 2 || "$2" == -* ]]; then
+                    die "после -a, --add требуется аргумент (команда)"
+                fi
+                command="$2"
+                
+                if [[ $# -ge 3 && "$3" != -* && -n "$3" ]]; then
+                    comment="$3"
+                    shift 3
+                else
+                    shift 2
+                fi
+                ;;
+            
+            -y|--last-cmd)
+                command="$(get_last_cmd)"
+
+                if [[ $# -ge 2 && "$2" != -* && -n "$2" ]]; then
+                    comment="$2"
+                    shift 2
+                else
+                    shift 1
+                fi
+                ;;
+            
+            -t|--tags)
+                if [[ $# -lt 2 || "$2" == -* ]]; then
+                    die "после -t, --tags требуется аргумент (теги)"
+                fi
+                tags="$2"
+                shift 2
+                ;;
+            
+            -s|--search)
+                if [[ $# -lt 2 || "$2" == -* ]]; then
+                    die "после -s, --search требуется аргумент (запрос)"
+                fi
+                search_query="$2"
+                shift 2
+                ;;
+
+            --all-tags)
+                if [[ $# -lt 2 || "$2" == -* ]]; then
+                    die "после --all-tags требуется аргумент (теги)"
+                fi
+                filter_all_tags="$2"
+                shift 2
+                ;;
+            
+            --any-tags)
+                if [[ $# -lt 2 || "$2" == -* ]]; then
+                    die "после --any-tags требуется аргумент (теги)"
+                fi
+                filter_any_tags="$2"
+                shift 2
+                ;;
+            
+            --remove-tags)
+                if [[ $# -lt 2 || "$2" == -* ]]; then
+                    die "после --remove-tags требуется аргумент (номер)"
+                fi
+                remove_tags_num="$2"
+                
+                if [[ $# -ge 3 && "$3" != -* && -n "$3" ]]; then
+                    remove_tags="$3"
+                    shift 3
+                else
+                    shift 2
+                fi
+                ;;
+
+            -e|--edit)
+                if [[ $# -lt 2 || "$2" == -* ]]; then
+                    die "после -e, --edit требуется аргумент (номер)"
+                fi
+                edit_num="$2"
+                shift 2
+                ;;
+            
+            -d|--delete)
+                if [[ $# -lt 2 || "$2" == -* ]]; then
+                    die "после -d, --delete требуется аргумент (номер)"
+                fi
+                delete_num="$2"
+                shift 2
+                ;;
+            
+            -i|--insert)
+                if [[ $# -lt 2 || "$2" == -* ]]; then
+                    die "после -i, --insert требуется аргумент (номер)"
+                fi
+                insert_num="$2"
+                shift 2
+                ;;
+            
+            --copy)
+                if [[ $# -lt 2 || "$2" == -* ]]; then
+                    die "после --copy требуется аргумент (номер)"
+                fi
+                copy_num="$2"
+                shift 2
+                ;;
+            
+            --info)
+                info_num="$2"
+                if [[ $# -lt 2 || "$2" == -* ]]; then
+                    die "после --info требуется аргумент (номер)"
+                fi
+                shift 2
+                ;;
+            
+            *)
+                print_msg r "Неизвестный аргумент: $1"
+                print_msg r "Используйте tips --help для просмотра справки"
+                exit 1
+                ;;
         esac
     done
     
-    shift $((OPTIND-1))
+    # Обработка действий
+    if [[ -n "$command" ]]; then
+        add_tip "$command" "$comment" "$tags"
+        exit 0
+    fi
+
+    if [[ -n "$search_query" ]] || [[ -n "$filter_all_tags" ]] || [[ -n "$filter_any_tags" ]]; then
+        search_tips "$search_query" "$filter_all_tags" "$filter_any_tags"
+        exit 0
+    fi
+
+    if [[ -n "$remove_tags_num" ]]; then
+        remove_tags "$remove_tags_num" "$remove_tags"
+        exit 0
+    fi
+
+    elif [[ -n "$edit_num" ]]; then
+        local tip=$(get_tip "$edit_num")
+        if [[ -z "$tip" ]]; then
+            echo "Запись $edit_num не найдена."
+            exit 1
+        fi
+        
+        IFS='|' read -ra parts <<< "$tip"
+        read -e -p "Команда: " -i "${parts[1]}" cmd
+        read -e -p "Комментарий: " -i "${parts[2]}" comment
+        read -e -p "Теги: " -i "${parts[3]}" tags
+        
+        edit_tip "$edit_num" "$cmd" "$comment" "$tags"
+        echo "Запись $edit_num обновлена."
     
-    # Обработка длинных флагов
-    case "$1" in
-        --clear) clear_tips ;;
-        --list) list_tips ;;
-        --help) print_help ;;
-        --count) echo "Всего подсказок: $(count_tips)" ;;
-        --*) print_message red "Неизвестный флаг: $1"; print_help; exit 1 ;;
-    esac
+    elif [[ -n "$delete_num" ]]; then
+        delete_tip "$delete_num"
+        echo "Запись $delete_num удалена."
     
-    # Добавление подсказки (если указана)
-    [ -n "$tip" ] && add_tip "$tip" "$comment"
+    elif [[ -n "$add_tags_num" ]]; then
+        local tip=$(get_tip "$add_tags_num")
+        if [[ -z "$tip" ]]; then
+            echo "Запись $add_tags_num не найдена."
+            exit 1
+        fi
+        
+        IFS='|' read -ra parts <<< "$tip"
+        local current_tags="${parts[3]}"
+        local new_tags=""
+        
+        if [[ -n "$current_tags" ]]; then
+            new_tags="${current_tags},${add_tags_value}"
+        else
+            new_tags="$add_tags_value"
+        fi
+        
+        edit_tip "$add_tags_num" "${parts[1]}" "${parts[2]}" "$new_tags"
+        echo "Теги добавлены к записи $add_tags_num."
     
-    # Если не передано ни одного аргумента
-    [ $OPTIND -eq 1 ] && print_help
+    elif [[ -n "$remove_tags_num" ]]; then
+        local tip=$(get_tip "$remove_tags_num")
+        if [[ -z "$tip" ]]; then
+            echo "Запись $remove_tags_num не найдена."
+            exit 1
+        fi
+        
+        IFS='|' read -ra parts <<< "$tip"
+        IFS=',' read -ra current_tags <<< "${parts[3]}"
+        IFS=',' read -ra tags_to_remove <<< "$remove_tags_value"
+        
+        local new_tags=()
+        for tag in "${current_tags[@]}"; do
+            local should_remove=0
+            for tag_to_remove in "${tags_to_remove[@]}"; do
+                if [[ "$tag" == "$tag_to_remove" ]]; then
+                    should_remove=1
+                    break
+                fi
+            done
+            
+            if (( ! should_remove )); then
+                new_tags+=("$tag")
+            fi
+        done
+        
+        edit_tip "$remove_tags_num" "${parts[1]}" "${parts[2]}" "$(IFS=','; echo "${new_tags[*]}")"
+        echo "Теги удалены из записи $remove_tags_num."
+    elif [[ -n "$insert_num" ]]; then
+        local tip=$(get_tip "$insert_num")
+        if [[ -z "$tip" ]]; then
+            echo "Запись $insert_num не найдена."
+            exit 1
+        fi
+        
+        IFS='|' read -ra parts <<< "$tip"
+        echo "${parts[1]}"
+    elif [[ -n "$copy_num" ]]; then
+        local tip=$(get_tip "$copy_num")
+        if [[ -z "$tip" ]]; then
+            echo "Запись $copy_num не найдена."
+            exit 1
+        fi
+        
+        IFS='|' read -ra parts <<< "$tip"
+        if command -v xclip >/dev/null; then
+            echo -n "${parts[1]}" | xclip -selection clipboard
+            echo "Команда скопирована в буфер обмена: ${parts[1]}"
+        elif command -v pbcopy >/dev/null; then
+            echo -n "${parts[1]}" | pbcopy
+            echo "Команда скопирована в буфер обмена: ${parts[1]}"
+        else
+            echo "Не найдена утилита для работы с буфером обмена (xclip/pbcopy)"
+            echo "Команда для копирования: ${parts[1]}"
+        fi
+    elif [[ -n "$info_num" ]]; then
+        local tip=$(get_tip "$info_num")
+        if [[ -z "$tip" ]]; then
+            echo "Запись $info_num не найдена."
+            exit 1
+        fi
+        
+        IFS='|' read -ra parts <<< "$tip"
+        echo "ID: ${parts[0]}"
+        echo "Команда: ${parts[1]}"
+        echo "Комментарий: ${parts[2]}"
+        echo "Теги: ${parts[3]}"
+        echo "Дата создания: ${parts[4]}"
+    elif [[ -n "$backup_path" ]]; then
+        cp "$TIPS_FILE" "$backup_path"
+        echo "Резервная копия создана: $backup_path"
+    else
+        list_tips
+    fi
 }
 
 main "$@"

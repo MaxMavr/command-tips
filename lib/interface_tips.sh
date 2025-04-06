@@ -4,17 +4,26 @@ count_tips() {
 }
 
 # Добавление записи
+# Добавить запись
 add_tip() {
-    local id=$(date +%s%N | cut -b1-13)
-    local cmd="$1"
-    local comment="$2"
+    local command=encod_csv "$1"
+    local comment=encod_csv "$2"
+    local tags=encod_csv "$3"
     
-    # Экранирование кавычек и запятых в CSV
-    cmd=$(echo "$cmd" | sed 's/"/""/g')
-    comment=$(echo "$comment" | sed 's/"/""/g')
+    local id=$(($(wc -l < "$DB_FILE")))
+    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
     
-    echo "\"$id\",\"$cmd\",\"$comment\",\"\",\"\"" >> "$DB_FILE"
-    print_msg g "Добавлена запись #$(count_tips) : $cmd"
+    echo "$id,\"$command\",\"$comment\",\"$tags\",\"$timestamp\"" >> "$DB_FILE"
+    print_msg g "Добавлена запись #$id: $command"
+
+    if [[ -n "$comment" ]]; then
+    print_msg g "     Комментарий: $comment"
+    fi
+
+    if [[ -n "$tags" ]]; then
+    print_msg g "           Теги: $tags"
+    fi
+    exit 0
 }
 
 add_last_cmd() {
@@ -23,7 +32,7 @@ add_last_cmd() {
 }
 
 # Очистка базы
-clear_db() {
+clear_tips() {
     read -p "Вы уверены, что хотите полностью очистить базу данных? (y/N) " confirm
     if [[ "$confirm" =~ [yY] ]]; then
         echo "id,command,comment,tags,last_used" > "$DB_FILE"
@@ -135,4 +144,27 @@ filter_any_tags() {
             printf " \033[1;32m[%s]\033[0m\n", current_tags
         }
     }' "$DB_FILE"
+}
+
+# Показать все записи
+list_tips() {
+    if [ ! -s "$DB_FILE" ]; then
+        echo "База данных пуста"
+        return
+    fi
+    
+    echo -e "ID\tКоманда\t\tКомментарий\t\tТеги"
+    echo "------------------------------------------------------------"
+    
+    tail -n +2 "$DB_FILE" | while IFS=',' read -r id command comment tags last_used; do
+        command=$(echo "$command" | tr -d '"')
+        comment=$(echo "$comment" | tr -d '"')
+        tags=$(echo "$tags" | tr -d '"')
+        
+        # Обрезаем длинные строки для лучшего отображения
+        local short_cmd=$(echo "$command" | cut -c1-20)
+        local short_comment=$(echo "$comment" | cut -c1-20)
+        
+        echo -e "$id\t$short_cmd\t$short_comment\t$tags"
+    done
 }
