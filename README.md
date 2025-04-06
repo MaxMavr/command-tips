@@ -83,7 +83,7 @@ tips --add-tags 7 сети,nginx --remove-tags 7 временные
 | `tips --stats` | Статистика по тегам | `tips --stats` |
 | `tips --info <номер>` | Подробная информация | `tips --info 5` |
 
-## ℹ️ Справка
+## Справка
 ```bash
 tips -h, --help     # Показать справку
 tips -v, --version  # Показать версию
