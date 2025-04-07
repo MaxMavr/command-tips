@@ -21,6 +21,9 @@ main() {
     local remove_tags=""
 
     local edit_id=""
+    local edit_id=""
+    local edit_id=""
+    
     local delete_id=""
     local insert_id=""
     local copy_id=""
@@ -129,9 +132,11 @@ main() {
                 if [[ $# -lt 2 || "$2" == -* || -n "$2" ]]; then
                     die "после -e, --edit требуется аргумент (номер)"
                 fi
+                edit_id="$2"
                 if [[ $# -lt 3 || "$3" == -* || -n "$3" ]]; then
                     die "после -e, --edit требуется аргумент (cmd cmt tags)"
                 fi
+                edit_id="$2"
                 if [[ $# -lt 4 || "$4" == -* || -n "$4" ]]; then
                     die "после -e, --edit требуется аргумент (новое значение)"
                 fi
