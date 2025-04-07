@@ -17,14 +17,14 @@ main() {
     local filter_all_tags=""
     local filter_any_tags=""
 
-    local remove_tags_num=""
+    local remove_tags_id=""
     local remove_tags=""
 
-    local edit_num=""
-    local delete_num=""
-    local insert_num=""
-    local copy_num=""
-    local info_num=""
+    local edit_id=""
+    local delete_id=""
+    local insert_id=""
+    local copy_id=""
+    local info_id=""
 
     # Разбор аргументов
     while [[ $# -gt 0 ]]; do
@@ -34,7 +34,7 @@ main() {
                 exit 0
                 ;;
             
-            -c|--clear)
+            --clear)
                 clear_tips
                 exit 0
                 ;;
@@ -115,7 +115,7 @@ main() {
                 if [[ $# -lt 2 || "$2" == -* ]]; then
                     die "после --remove-tags требуется аргумент (номер)"
                 fi
-                remove_tags_num="$2"
+                remove_tags_id="$2"
                 
                 if [[ $# -ge 3 && "$3" != -* && -n "$3" ]]; then
                     remove_tags="$3"
@@ -129,7 +129,7 @@ main() {
                 if [[ $# -lt 2 || "$2" == -* ]]; then
                     die "после -e, --edit требуется аргумент (номер)"
                 fi
-                edit_num="$2"
+                edit_id="$2"
                 shift 2
                 ;;
             
@@ -137,7 +137,7 @@ main() {
                 if [[ $# -lt 2 || "$2" == -* ]]; then
                     die "после -d, --delete требуется аргумент (номер)"
                 fi
-                delete_num="$2"
+                delete_id="$2"
                 shift 2
                 ;;
             
@@ -145,20 +145,20 @@ main() {
                 if [[ $# -lt 2 || "$2" == -* ]]; then
                     die "после -i, --insert требуется аргумент (номер)"
                 fi
-                insert_num="$2"
+                insert_id="$2"
                 shift 2
                 ;;
             
-            --copy)
+            -c|--copy)
                 if [[ $# -lt 2 || "$2" == -* ]]; then
-                    die "после --copy требуется аргумент (номер)"
+                    die "после -c, --copy требуется аргумент (номер)"
                 fi
-                copy_num="$2"
+                copy_id="$2"
                 shift 2
                 ;;
             
             --info)
-                info_num="$2"
+                info_id="$2"
                 if [[ $# -lt 2 || "$2" == -* ]]; then
                     die "после --info требуется аргумент (номер)"
                 fi
@@ -184,124 +184,135 @@ main() {
         exit 0
     fi
 
-    if [[ -n "$remove_tags_num" ]]; then
-        remove_tags "$remove_tags_num" "$remove_tags"
+    if [[ -n "$remove_tags_id" ]]; then
+        remove_tags "$remove_tags_id" "$remove_tags"
         exit 0
     fi
 
-    elif [[ -n "$edit_num" ]]; then
-        local tip=$(get_tip "$edit_num")
-        if [[ -z "$tip" ]]; then
-            echo "Запись $edit_num не найдена."
-            exit 1
-        fi
-        
-        IFS='|' read -ra parts <<< "$tip"
-        read -e -p "Команда: " -i "${parts[1]}" cmd
-        read -e -p "Комментарий: " -i "${parts[2]}" comment
-        read -e -p "Теги: " -i "${parts[3]}" tags
-        
-        edit_tip "$edit_num" "$cmd" "$comment" "$tags"
-        echo "Запись $edit_num обновлена."
-    
-    elif [[ -n "$delete_num" ]]; then
-        delete_tip "$delete_num"
-        echo "Запись $delete_num удалена."
-    
-    elif [[ -n "$add_tags_num" ]]; then
-        local tip=$(get_tip "$add_tags_num")
-        if [[ -z "$tip" ]]; then
-            echo "Запись $add_tags_num не найдена."
-            exit 1
-        fi
-        
-        IFS='|' read -ra parts <<< "$tip"
-        local current_tags="${parts[3]}"
-        local new_tags=""
-        
-        if [[ -n "$current_tags" ]]; then
-            new_tags="${current_tags},${add_tags_value}"
-        else
-            new_tags="$add_tags_value"
-        fi
-        
-        edit_tip "$add_tags_num" "${parts[1]}" "${parts[2]}" "$new_tags"
-        echo "Теги добавлены к записи $add_tags_num."
-    
-    elif [[ -n "$remove_tags_num" ]]; then
-        local tip=$(get_tip "$remove_tags_num")
-        if [[ -z "$tip" ]]; then
-            echo "Запись $remove_tags_num не найдена."
-            exit 1
-        fi
-        
-        IFS='|' read -ra parts <<< "$tip"
-        IFS=',' read -ra current_tags <<< "${parts[3]}"
-        IFS=',' read -ra tags_to_remove <<< "$remove_tags_value"
-        
-        local new_tags=()
-        for tag in "${current_tags[@]}"; do
-            local should_remove=0
-            for tag_to_remove in "${tags_to_remove[@]}"; do
-                if [[ "$tag" == "$tag_to_remove" ]]; then
-                    should_remove=1
-                    break
-                fi
-            done
-            
-            if (( ! should_remove )); then
-                new_tags+=("$tag")
-            fi
-        done
-        
-        edit_tip "$remove_tags_num" "${parts[1]}" "${parts[2]}" "$(IFS=','; echo "${new_tags[*]}")"
-        echo "Теги удалены из записи $remove_tags_num."
-    elif [[ -n "$insert_num" ]]; then
-        local tip=$(get_tip "$insert_num")
-        if [[ -z "$tip" ]]; then
-            echo "Запись $insert_num не найдена."
-            exit 1
-        fi
-        
-        IFS='|' read -ra parts <<< "$tip"
-        echo "${parts[1]}"
-    elif [[ -n "$copy_num" ]]; then
-        local tip=$(get_tip "$copy_num")
-        if [[ -z "$tip" ]]; then
-            echo "Запись $copy_num не найдена."
-            exit 1
-        fi
-        
-        IFS='|' read -ra parts <<< "$tip"
-        if command -v xclip >/dev/null; then
-            echo -n "${parts[1]}" | xclip -selection clipboard
-            echo "Команда скопирована в буфер обмена: ${parts[1]}"
-        elif command -v pbcopy >/dev/null; then
-            echo -n "${parts[1]}" | pbcopy
-            echo "Команда скопирована в буфер обмена: ${parts[1]}"
-        else
-            echo "Не найдена утилита для работы с буфером обмена (xclip/pbcopy)"
-            echo "Команда для копирования: ${parts[1]}"
-        fi
-    elif [[ -n "$info_num" ]]; then
-        local tip=$(get_tip "$info_num")
-        if [[ -z "$tip" ]]; then
-            echo "Запись $info_num не найдена."
-            exit 1
-        fi
-        
-        IFS='|' read -ra parts <<< "$tip"
-        echo "ID: ${parts[0]}"
-        echo "Команда: ${parts[1]}"
-        echo "Комментарий: ${parts[2]}"
-        echo "Теги: ${parts[3]}"
-        echo "Дата создания: ${parts[4]}"
-    elif [[ -n "$backup_path" ]]; then
-        cp "$TIPS_FILE" "$backup_path"
-        echo "Резервная копия создана: $backup_path"
-    else
-        list_tips
+    if [[ -n "$insert_id" ]]; then
+        insert_tip "$insert_id"
+        exit 0
     fi
+
+    if [[ -n "$copy_id" ]]; then
+        copy_tip "$copy_id"
+        exit 0
+    fi
+
+
+    # elif [[ -n "$edit_id" ]]; then
+    #     local tip=$(get_tip "$edit_id")
+    #     if [[ -z "$tip" ]]; then
+    #         echo "Запись $edit_id не найдена."
+    #         exit 1
+    #     fi
+        
+    #     IFS='|' read -ra parts <<< "$tip"
+    #     read -e -p "Команда: " -i "${parts[1]}" cmd
+    #     read -e -p "Комментарий: " -i "${parts[2]}" comment
+    #     read -e -p "Теги: " -i "${parts[3]}" tags
+        
+    #     edit_tip "$edit_id" "$cmd" "$comment" "$tags"
+    #     echo "Запись $edit_id обновлена."
+    
+    # elif [[ -n "$delete_id" ]]; then
+    #     delete_tip "$delete_id"
+    #     echo "Запись $delete_id удалена."
+    
+    # elif [[ -n "$add_tags_id" ]]; then
+    #     local tip=$(get_tip "$add_tags_id")
+    #     if [[ -z "$tip" ]]; then
+    #         echo "Запись $add_tags_id не найдена."
+    #         exit 1
+    #     fi
+        
+    #     IFS='|' read -ra parts <<< "$tip"
+    #     local current_tags="${parts[3]}"
+    #     local new_tags=""
+        
+    #     if [[ -n "$current_tags" ]]; then
+    #         new_tags="${current_tags},${add_tags_value}"
+    #     else
+    #         new_tags="$add_tags_value"
+    #     fi
+        
+    #     edit_tip "$add_tags_id" "${parts[1]}" "${parts[2]}" "$new_tags"
+    #     echo "Теги добавлены к записи $add_tags_id."
+    
+    # elif [[ -n "$remove_tags_id" ]]; then
+    #     local tip=$(get_tip "$remove_tags_id")
+    #     if [[ -z "$tip" ]]; then
+    #         echo "Запись $remove_tags_id не найдена."
+    #         exit 1
+    #     fi
+        
+    #     IFS='|' read -ra parts <<< "$tip"
+    #     IFS=',' read -ra current_tags <<< "${parts[3]}"
+    #     IFS=',' read -ra tags_to_remove <<< "$remove_tags_value"
+        
+    #     local new_tags=()
+    #     for tag in "${current_tags[@]}"; do
+    #         local should_remove=0
+    #         for tag_to_remove in "${tags_to_remove[@]}"; do
+    #             if [[ "$tag" == "$tag_to_remove" ]]; then
+    #                 should_remove=1
+    #                 break
+    #             fi
+    #         done
+            
+    #         if (( ! should_remove )); then
+    #             new_tags+=("$tag")
+    #         fi
+    #     done
+        
+    #     edit_tip "$remove_tags_id" "${parts[1]}" "${parts[2]}" "$(IFS=','; echo "${new_tags[*]}")"
+    #     echo "Теги удалены из записи $remove_tags_id."
+    # elif [[ -n "$insert_id" ]]; then
+    #     local tip=$(get_tip "$insert_id")
+    #     if [[ -z "$tip" ]]; then
+    #         echo "Запись $insert_id не найдена."
+    #         exit 1
+    #     fi
+        
+    #     IFS='|' read -ra parts <<< "$tip"
+    #     echo "${parts[1]}"
+    # elif [[ -n "$copy_id" ]]; then
+    #     local tip=$(get_tip "$copy_id")
+    #     if [[ -z "$tip" ]]; then
+    #         echo "Запись $copy_id не найдена."
+    #         exit 1
+    #     fi
+        
+    #     IFS='|' read -ra parts <<< "$tip"
+    #     if command -v xclip >/dev/null; then
+    #         echo -n "${parts[1]}" | xclip -selection clipboard
+    #         echo "Команда скопирована в буфер обмена: ${parts[1]}"
+    #     elif command -v pbcopy >/dev/null; then
+    #         echo -n "${parts[1]}" | pbcopy
+    #         echo "Команда скопирована в буфер обмена: ${parts[1]}"
+    #     else
+    #         echo "Не найдена утилита для работы с буфером обмена (xclip/pbcopy)"
+    #         echo "Команда для копирования: ${parts[1]}"
+    #     fi
+    # elif [[ -n "$info_id" ]]; then
+    #     local tip=$(get_tip "$info_id")
+    #     if [[ -z "$tip" ]]; then
+    #         echo "Запись $info_id не найдена."
+    #         exit 1
+    #     fi
+        
+    #     IFS='|' read -ra parts <<< "$tip"
+    #     echo "ID: ${parts[0]}"
+    #     echo "Команда: ${parts[1]}"
+    #     echo "Комментарий: ${parts[2]}"
+    #     echo "Теги: ${parts[3]}"
+    #     echo "Дата создания: ${parts[4]}"
+    # elif [[ -n "$backup_path" ]]; then
+    #     cp "$TIPS_FILE" "$backup_path"
+    #     echo "Резервная копия создана: $backup_path"
+    # else
+    #     list_tips
+    # fi
 }
 
 main "$@"

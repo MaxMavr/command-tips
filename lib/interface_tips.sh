@@ -3,32 +3,101 @@ count_tips() {
     tail -n +2 "$DB_FILE" | wc -l
 }
 
-# Добавление записи
-# Добавить запись
 add_tip() {
-    local command=encod_csv "$1"
-    local comment=encod_csv "$2"
-    local tags=encod_csv "$3"
-    
-    local id=$(($(wc -l < "$DB_FILE")))
+    local command="$1"
+    local comment="$2"
+    local tags="$3"
+
+    local id=$(count_tips)
     local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
     
-    echo "$id,\"$command\",\"$comment\",\"$tags\",\"$timestamp\"" >> "$DB_FILE"
-    print_msg g "Добавлена запись #$id: $command"
+    echo "$id,\"$(encod_csv '$command')\",\"$(encod_csv '$comment')\",\"$(encod_csv '$tags')\",\"$timestamp\"" >> "$DB_FILE"
+    print_msg g "Добавлена запись: $command #$id"
 
     if [[ -n "$comment" ]]; then
     print_msg g "     Комментарий: $comment"
     fi
 
     if [[ -n "$tags" ]]; then
-    print_msg g "           Теги: $tags"
+    print_msg g "            Теги: $tags"
     fi
     exit 0
 }
 
-add_last_cmd() {
-    local last_cmd=$(get_last_cmd)
-    add_tip "$last_cmd" "$1"
+get_tip() {
+    local id="$1"
+    
+    if [[ -z "$id" || ! "$id" =~ ^[0-9]+$ ]]; then
+        die "неверный ID. Укажите числовой идентификатор подсказки."
+    fi
+
+    local tip=$(grep -w "^$id," "$DB_FILE" 2>/dev/null)
+
+    if [[ -z "$tip" ]]; then
+        die "подсказка с ID $id не найдена."
+    fi
+
+    IFS=$'\n' read -d '' -r -a fields < <(parse_csv_line "$tip")
+    
+    echo "${fields[*]:1}" | tr ' ' ','
+}
+
+edit_tip() {
+    local num=$1
+    local field="$2"
+    local new_value="$3"
+    local date=$(date +"%Y-%m-%d %H:%M:%S")
+    local tempfile=$(mktemp)
+    
+    # Обрабатываем CSV с запятыми как разделителями
+    awk -v num="$num" -v field="$field" -v new_value="$new_value" -v date="$date" \
+        'BEGIN{FS=OFS=","} {
+            # Пропускаем заголовок
+            if (NR == 1) {print; next}
+            
+            # Если это нужная строка
+            if (NR-1 == num) {
+                # Определяем какое поле нужно обновить
+                if (field == "command") $2 = new_value
+                else if (field == "comment") $3 = new_value
+                else if (field == "tags") $4 = new_value
+                
+                # Всегда обновляем дату последнего использования
+                $5 = date
+            }
+            print
+        }' "$DB_FILE" > "$tempfile"
+    
+    mv "$tempfile" "$DB_FILE"
+}
+
+remove_tags() {
+    local remove_tags_num= "$1"
+    local remove_tags= "$2"
+    local tip=$(get_tip "$remove_tags_num")
+
+    IFS=$'\n' read -ra fields <<< "$tip"
+    IFS=',' read -ra current_tags <<< "${parts[3]}"
+    IFS=',' read -ra remove_tags <<< "$remove_tags"
+
+    local new_tags=()
+
+    for tag in "${current_tags[@]}"; do
+        local should_remove=0
+        for remove_tag in "${remove_tags[@]}"; do
+            if [[ "$tag" == "$remove_tag" ]]; then
+                should_remove=1
+                break
+            fi
+        done
+        
+        if (( ! should_remove )); then
+            new_tags+=("$tag")
+        fi
+    done
+    
+    edit_tip "$remove_tags_num" tags "$(IFS=','; echo "${new_tags[*]}")"
+    print_msg g "Теги \"$remove_tags\" удалены из записи $remove_tags_num."
 }
 
 # Очистка базы
@@ -147,13 +216,14 @@ filter_any_tags() {
 }
 
 # Показать все записи
+#Todo Сделать вывод красывым
 list_tips() {
     if [ ! -s "$DB_FILE" ]; then
-        echo "База данных пуста"
+        print_msg y "База данных пуста"
         return
     fi
     
-    echo -e "ID\tКоманда\t\tКомментарий\t\tТеги"
+    print_msg "ID\tКоманда\t\tКомментарий\t\tТеги"
     echo "------------------------------------------------------------"
     
     tail -n +2 "$DB_FILE" | while IFS=',' read -r id command comment tags last_used; do
@@ -165,6 +235,48 @@ list_tips() {
         local short_cmd=$(echo "$command" | cut -c1-20)
         local short_comment=$(echo "$comment" | cut -c1-20)
         
-        echo -e "$id\t$short_cmd\t$short_comment\t$tags"
+        echo -e "$id\t$short_cmd\t\t$short_comment\t\t$tags"
     done
+}
+
+# Функция для вставки команды в консоль
+insert_tip() {
+    local id=$1
+    local tip=$(get_tip $id)
+    local command=$(tip[1])
+    
+    
+    echo "Готово к выполнению: $command"
+    # Для bash/zsh:
+    printf '\e[0n%s' "$command"  # Это может работать не во всех терминалах
+    # Альтернатива (если предыдущий вариант не работает):
+    # echo -n "$command" | xclip -selection primary
+    # Или для некоторых терминалов:
+    # echo -n "$command" > /dev/tty
+}
+
+# Функция для копирования команды в буфер обмена
+copy_tip() {
+    local num=$1
+    local command
+    
+    # Получаем команду по номеру (пропускаем заголовок)
+    command=$(awk -F, -v num=$num 'NR==num+1 {print $2}' "$DB_FILE")
+    
+    if [[ -z "$command" ]]; then
+        echo "Ошибка: команда с номером $num не найдена" >&2
+        return 1
+    fi
+    
+    # Копируем в буфер обмена (зависит от системы)
+    if command -v xclip &> /dev/null; then
+        echo -n "$command" | xclip -selection clipboard
+        echo "Команда скопирована в буфер обмена"
+    elif command -v pbcopy &> /dev/null; then
+        echo -n "$command" | pbcopy
+        echo "Команда скопирована в буфер обмена"
+    else
+        echo "Не найдены инструменты для работы с буфером обмена (xclip/pbcopy)" >&2
+        return 1
+    fi
 }
