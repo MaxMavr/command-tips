@@ -1,6 +1,7 @@
 # Подсчет записей
 count_tips() {
-    tail -n +2 "$DB_FILE" | wc -l
+    local count=$(grep -c "^id:" "$DB_FILE")
+    echo "$count"
 }
 
 add_tip() {
@@ -10,8 +11,13 @@ add_tip() {
 
     local id=$(count_tips)
     local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-    
-    echo "$id,\"$(encod_csv '$command')\",\"$(encod_csv '$comment')\",\"$(encod_csv '$tags')\",\"$timestamp\"" >> "$DB_FILE"
+
+    echo "id: $id" >> "$DB_FILE"
+    echo "command: $command" >> "$DB_FILE"
+    echo "comment: $comment" >> "$DB_FILE"
+    echo "tags: $tags" >> "$DB_FILE"
+    echo "timestamp: $timestamp" >> "$DB_FILE"
+
     print_msg g "Добавлена запись: $command #$id"
 
     if [[ -n "$comment" ]]; then
@@ -21,7 +27,6 @@ add_tip() {
     if [[ -n "$tags" ]]; then
     print_msg g "            Теги: $tags"
     fi
-    exit 0
 }
 
 get_tip() {
@@ -30,16 +35,23 @@ get_tip() {
     if [[ -z "$id" || ! "$id" =~ ^[0-9]+$ ]]; then
         die "неверный ID. Укажите числовой идентификатор подсказки."
     fi
+    
+    record=$(grep -Pzo "id: $id(\n|.)*?(?=\nid:|\$)" "$file")
 
-    local tip=$(grep -w "^$id," "$DB_FILE" 2>/dev/null)
-
-    if [[ -z "$tip" ]]; then
-        die "подсказка с ID $id не найдена."
+    # Проверяем, найдена ли запись
+    if [ -z "$record" ]; then
+        echo "Запись с ID $id не найдена"
+        exit 1
     fi
 
-    IFS=$'\n' read -d '' -r -a fields < <(parse_csv_line "$tip")
-    
-    echo "${fields[*]:1}" | tr ' ' ','
+    # Извлекаем отдельные поля
+    command=$(echo "$record" | grep -Po "(?<=command: ).*")
+    comment=$(echo "$record" | grep -Po "(?<=comment: ).*")
+    tags=$(echo "$record" | grep -Po "(?<=tags: ).*")
+    timestamp=$(echo "$record" | grep -Po "(?<=timestamp: ).*")
+
+    # Формируем и выводим список tip
+    echo "tip=($id \"$command\" \"$comment\" \"$tags\" \"$timestamp\")"
 }
 
 edit_tip() {
@@ -104,31 +116,11 @@ remove_tags() {
 clear_tips() {
     read -p "Вы уверены, что хотите полностью очистить базу данных? (y/N) " confirm
     if [[ "$confirm" =~ [yY] ]]; then
-        echo "id,command,comment,tags,last_used" > "$DB_FILE"
+        > "$DB_FILE"
         print_msg g "База данных очищена"
     else
         print_msg r "Отменено"
     fi
-}
-
-# Добавление тегов
-add_tags() {
-    local id="$1"
-    local tags="$2"
-    
-    awk -v id="$id" -v tags="$tags" 'BEGIN {FS=OFS=","} {
-        if ($1 == "\""id"\"" || NR == 1) {
-            if (NR == 1) print; 
-            else {
-                current_tags = substr($4, 2, length($4)-2)
-                if (current_tags == "") new_tags = tags
-                else new_tags = current_tags "," tags
-                print $1,$2,$3,"\""new_tags"\"",$5
-            }
-        } else print
-    }' "$DB_FILE" > "${DB_FILE}.tmp" && mv "${DB_FILE}.tmp" "$DB_FILE"
-    
-    print_msg g "Теги добавлены к записи #$id"
 }
 
 # Поиск
@@ -226,17 +218,23 @@ list_tips() {
     print_msg "ID\tКоманда\t\tКомментарий\t\tТеги"
     echo "------------------------------------------------------------"
     
-    tail -n +2 "$DB_FILE" | while IFS=',' read -r id command comment tags last_used; do
-        command=$(echo "$command" | tr -d '"')
-        comment=$(echo "$comment" | tr -d '"')
-        tags=$(echo "$tags" | tr -d '"')
-        
-        # Обрезаем длинные строки для лучшего отображения
-        local short_cmd=$(echo "$command" | cut -c1-20)
-        local short_comment=$(echo "$comment" | cut -c1-20)
-        
-        echo -e "$id\t$short_cmd\t\t$short_comment\t\t$tags"
+    for ((i=1; i<="$(count_tips)" - 1; i++)); do
+        # echo $(get_tip "$i")
+        get_tip "$i"
     done
+
+
+    # tail -n +2 "$DB_FILE" | while IFS=',' read -r id command comment tags last_used; do
+    #     command=$(echo "$command" | tr -d '"')
+    #     comment=$(echo "$comment" | tr -d '"')
+    #     tags=$(echo "$tags" | tr -d '"')
+        
+    #     # Обрезаем длинные строки для лучшего отображения
+    #     local short_cmd=$(echo "$command" | cut -c1-20)
+    #     local short_comment=$(echo "$comment" | cut -c1-20)
+        
+    #     echo -e "$id\t$short_cmd\t\t$short_comment\t\t$tags"
+    # done
 }
 
 # Функция для вставки команды в консоль
