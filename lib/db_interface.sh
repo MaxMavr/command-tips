@@ -32,26 +32,21 @@ add_tip() {
 get_tip() {
     local id="$1"
     
-    if [[ -z "$id" || ! "$id" =~ ^[0-9]+$ ]]; then
-        die "неверный ID. Укажите числовой идентификатор подсказки."
-    fi
+    [[ -z "$id" || ! "$id" =~ ^[0-9]+$ ]] && die "неверный ID. Укажите числовой идентификатор подсказки."
     
-    record=$(grep -Pzo "id: $id(\n|.)*?(?=\nid:|\$)" "$file")
+    raw_tip=$(grep -Pzo "id: $id(\n|.)*?(?=\nid:|\$)" "$DB_FILE" | tr -d '\0')
 
-    # Проверяем, найдена ли запись
-    if [ -z "$record" ]; then
-        echo "Запись с ID $id не найдена"
-        exit 1
-    fi
+    [ -z "$raw_tip" ] && echo "запись с ID $id не найдена"
 
     # Извлекаем отдельные поля
-    command=$(echo "$record" | grep -Po "(?<=command: ).*")
-    comment=$(echo "$record" | grep -Po "(?<=comment: ).*")
-    tags=$(echo "$record" | grep -Po "(?<=tags: ).*")
-    timestamp=$(echo "$record" | grep -Po "(?<=timestamp: ).*")
+    command=$(echo "$raw_tip" | grep -Po "(?<=command: ).*")
+    comment=$(echo "$raw_tip" | grep -Po "(?<=comment: ).*")
+    tags=$(echo "$raw_tip" | grep -Po "(?<=tags: ).*")
+    timestamp=$(echo "$raw_tip" | grep -Po "(?<=timestamp: ).*")
 
     # Формируем и выводим список tip
-    echo "tip=($id \"$command\" \"$comment\" \"$tags\" \"$timestamp\")"
+    local -a tip=("$id" "$command" "$comment" "$tags" "$timestamp")
+    declare -p tip
 }
 
 edit_tip() {
@@ -208,73 +203,57 @@ filter_any_tags() {
 }
 
 # Показать все записи
-#Todo Сделать вывод красывым
 list_tips() {
     if [ ! -s "$DB_FILE" ]; then
         print_msg y "База данных пуста"
-        return
+        exit 0
     fi
-    
-    print_msg "ID\tКоманда\t\tКомментарий\t\tТеги"
-    echo "------------------------------------------------------------"
-    
-    for ((i=1; i<="$(count_tips)" - 1; i++)); do
-        # echo $(get_tip "$i")
-        get_tip "$i"
+
+    local -a ids=("ID") commands=("Команда") comments=("Комментарий") tagss=("Теги")
+    local max_length_id=0 max_length_command=0 max_length_comment=0
+    local count_tips="$(count_tips)"
+
+    for ((i=0; i<$count_tips; i++)); do
+        local tip=$(get_tip $i)
+        eval "$tip"
+
+        ids+=("${tip[0]}")
+        commands+=("${tip[1]}")
+        comments+=("${tip[2]}")
+        tagss+=("${tip[3]}")
+
+        (( ${#tip[0]} > max_length_id )) && max_length_id=${#tip[0]}
+        (( ${#tip[1]} > max_length_command )) && max_length_command=${#tip[1]}
+        (( ${#tip[2]} > max_length_comment )) && max_length_comment=${#tip[2]}
     done
 
-
-    # tail -n +2 "$DB_FILE" | while IFS=',' read -r id command comment tags last_used; do
-    #     command=$(echo "$command" | tr -d '"')
-    #     comment=$(echo "$comment" | tr -d '"')
-    #     tags=$(echo "$tags" | tr -d '"')
-        
-    #     # Обрезаем длинные строки для лучшего отображения
-    #     local short_cmd=$(echo "$command" | cut -c1-20)
-    #     local short_comment=$(echo "$comment" | cut -c1-20)
-        
-    #     echo -e "$id\t$short_cmd\t\t$short_comment\t\t$tags"
-    # done
+    for ((i=0; i<(($count_tips + 1)); i++)); do
+        echo -n "${ids[$i]}"
+        tput cuf $((max_length_id - ${#ids[$i]} + 3))
+        echo -n "${commands[$i]}"
+        tput cuf $((max_length_command - ${#commands[$i]} + 3))
+        echo -n "${comments[$i]}"
+        tput cuf $((max_length_comment - ${#comments[$i]} + 3))
+        echo "${tagss[$i]}"
+    done
 }
 
-# Функция для вставки команды в консоль
-insert_tip() {
-    local id=$1
-    local tip=$(get_tip $id)
-    local command=$(tip[1])
-    
-    
-    echo "Готово к выполнению: $command"
-    # Для bash/zsh:
-    printf '\e[0n%s' "$command"  # Это может работать не во всех терминалах
-    # Альтернатива (если предыдущий вариант не работает):
-    # echo -n "$command" | xclip -selection primary
-    # Или для некоторых терминалов:
-    # echo -n "$command" > /dev/tty
-}
+# Показать полную информацию о записи
+info_tip() {
+    local tip=$(get_tip $1)
+    eval "$tip"
+    local offset=0
 
-# Функция для копирования команды в буфер обмена
-copy_tip() {
-    local num=$1
-    local command
-    
-    # Получаем команду по номеру (пропускаем заголовок)
-    command=$(awk -F, -v num=$num 'NR==num+1 {print $2}' "$DB_FILE")
-    
-    if [[ -z "$command" ]]; then
-        echo "Ошибка: команда с номером $num не найдена" >&2
-        return 1
-    fi
-    
-    # Копируем в буфер обмена (зависит от системы)
-    if command -v xclip &> /dev/null; then
-        echo -n "$command" | xclip -selection clipboard
-        echo "Команда скопирована в буфер обмена"
-    elif command -v pbcopy &> /dev/null; then
-        echo -n "$command" | pbcopy
-        echo "Команда скопирована в буфер обмена"
-    else
-        echo "Не найдены инструменты для работы с буфером обмена (xclip/pbcopy)" >&2
-        return 1
-    fi
+    echo
+
+    for ((i=0; i<${#tip[@]}; i++)); do
+        local offset=$(( ${#tip[i]} > ${#FIELD_TITLES[i]} ? ${#tip[i]} : ${#FIELD_TITLES[i]} ))
+        tput sc
+        tput cuu 1
+        echo -n "${FIELD_TITLES[$i]}"
+        tput rc
+        echo -n "${tip[$i]}"
+        tput cuf $(( offset - ${#tip[i]} + 3 ))
+    done
+    echo
 }

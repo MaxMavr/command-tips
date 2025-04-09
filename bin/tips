@@ -2,6 +2,7 @@
 
 source "$(dirname "$0")/../lib/config.sh"
 source "$(dirname "$0")/../lib/helpers.sh"
+source "$(dirname "$0")/../lib/last_comand.sh"
 source "$(dirname "$0")/../lib/prints.sh"
 source "$(dirname "$0")/../lib/db_interface.sh"
 
@@ -9,70 +10,36 @@ source "$(dirname "$0")/../lib/db_interface.sh"
 main() {
     init_db
     
-    local command=""
-    local comment=""
-    local tags=""
-
-    local search_query=""
-    local filter_all_tags=""
-    local filter_any_tags=""
-
-    local remove_tags_id=""
-    local remove_tags=""
-
-    local edit_id=""
-    local edit_id=""
-    local edit_id=""
-    
-    local delete_id=""
-    local insert_id=""
-    local copy_id=""
-    local info_id=""
+    local command="" comment="" tags=""
+    local search_query="" filter_all_tags="" filter_any_tags=""
+    local remove_tags_id="" remove_tags=""
+    local edit_id="" edit_field="" edit_value=""
+    local delete_id="" insert_id="" copy_id="" info_id=""
 
     # Разбор аргументов
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            -l|--list)
-                list_tips
-                exit 0
-                ;;
-            
-            --clear)
-                clear_tips
-                exit 0
-                ;;
-            
-            -v|--version)
-                print_version
-                exit 0
-                ;;
-            
-            -h|--help)
-                print_help
-                exit 0
-                ;;
-            
-            --count)
-                print_count
-                exit 0
-                ;;
-            
+            -l|--list)    list_tips; exit 0 ;;
+            --clear)      clear_tips; exit 0 ;;
+            -v|--version) print_version; exit 0 ;;
+            -h|--help)    print_help; exit 0 ;;
+            --count)      print_count; exit 0 ;;
+
             -a|--add)
-                if [[ $# -lt 2 || "$2" == -* || -n "$3" ]]; then
-                    die "после -a, --add требуется аргумент (команда)"
-                fi
+                [[ "$2" == -* || -z "$2" ]] && die "после -a, --add требуется аргумент (команда)"
                 command="$2"
-                
-                if [[ $# -ge 3 && "$3" != -* && -n "$3" ]]; then
-                    comment="$3"
-                    shift 3
-                else
-                    shift 2
-                fi
+
+                [[ "$3" != -* && -n "$3" ]] && { comment="$3"; shift 3; } || shift 2
                 ;;
             
             -y|--last-cmd)
                 command="$(get_last_cmd)"
+
+                echo "!1"
+                get_last_cmd
+                echo "!2"
+                echo "$command"
+                echo "!3"
 
                 if [[ $# -ge 2 && "$2" != -* && -n "$2" ]]; then
                     comment="$2"
@@ -80,64 +47,51 @@ main() {
                 else
                     shift 1
                 fi
+
+                echo "$comment"
                 ;;
             
             -t|--tags)
-                if [[ $# -lt 2 || "$2" == -* || -n "$2" ]]; then
-                    die "после -t, --tags требуется аргумент (теги)"
-                fi
+                [[ "$2" == -* || -z "$2" ]] && die "после -t, --tags требуется аргумент (теги)"
                 tags="$2"
                 shift 2
                 ;;
             
             -s|--search)
-                if [[ $# -lt 2 || "$2" == -* || -n "$2" ]]; then
-                    die "после -s, --search требуется аргумент (запрос)"
-                fi
+                [[ "$2" == -* || -z "$2" ]] && die "после -s, --search требуется аргумент (запрос)"
                 search_query="$2"
                 shift 2
                 ;;
-
+            
             --all-tags)
-                if [[ $# -lt 2 || "$2" == -* || -n "$2" ]]; then
-                    die "после --all-tags требуется аргумент (теги)"
-                fi
+                [[ "$2" == -* || -z "$2" ]] && die "после --all-tags требуется аргумент (теги)"
                 filter_all_tags="$2"
                 shift 2
                 ;;
             
             --any-tags)
-                if [[ $# -lt 2 || "$2" == -* || -n "$2" ]]; then
-                    die "после --any-tags требуется аргумент (теги)"
-                fi
+                [[ "$2" == -* || -z "$2" ]] && die "после --any-tags требуется аргумент (теги)"
                 filter_any_tags="$2"
                 shift 2
                 ;;
             
             --remove-tags)
-                if [[ $# -lt 2 || "$2" == -* || -n "$2" ]]; then
-                    die "после --remove-tags требуется аргумент (номер)"
-                fi
+                [[ "$2" == -* || -z "$2" ]] && die "после --remove-tags требуется аргумент (номер)"
                 remove_tags_id="$2"
                 
-                if [[ $# -ge 3 && "$3" != -* && -n "$3" ]]; then
-                    remove_tags="$3"
-                    shift 3
-                else
-                    shift 2
-                fi
+                [[ "$3" != -* && -n "$3" ]] && { remove_tags="$3"; shift 3; } || shift 2
                 ;;
-
+            
             -e|--edit)
-                if [[ $# -lt 2 || "$2" == -* || -n "$2" ]]; then
+                if [[ $# -lt 2 || "$2" == -* || -z "$2" ]]; then
                     die "после -e, --edit требуется аргумент (номер)"
                 fi
                 edit_id="$2"
-                if [[ $# -lt 3 || "$3" == -* || -n "$3" ]]; then
+                if [[ $# -lt 3 || "$3" == -* || -z "$3" ]]; then
                     die "после -e, --edit требуется аргумент (cmd cmt tags)"
                 fi
                 edit_id="$2"
-                if [[ $# -lt 4 || "$4" == -* || -n "$4" ]]; then
+                if [[ $# -lt 4 || "$4" == -* || -z "$4" ]]; then
                     die "после -e, --edit требуется аргумент (новое значение)"
                 fi
                 edit_id="$2"
@@ -145,42 +99,34 @@ main() {
                 ;;
             
             -d|--delete)
-                if [[ $# -lt 2 || "$2" == -* || -n "$2" ]]; then
-                    die "после -d, --delete требуется аргумент (номер)"
-                fi
+                [[ "$2" == -* || -z "$2" ]] && die "после -d, --delete требуется аргумент (номер)"
                 delete_id="$2"
                 shift 2
                 ;;
             
             -i|--insert)
-                if [[ $# -lt 2 || "$2" == -* || -n "$2" ]]; then
-                    die "после -i, --insert требуется аргумент (номер)"
-                fi
+                [[ "$2" == -* || -z "$2" ]] && die "после -i, --insert требуется аргумент (номер)"
                 insert_id="$2"
                 shift 2
                 ;;
             
             -c|--copy)
-                if [[ $# -lt 2 || "$2" == -* || -n "$2" ]]; then
-                    die "после -c, --copy требуется аргумент (номер)"
-                fi
+                [[ "$2" == -* || -z "$2" ]] && die "после -c, --copy требуется аргумент (номер)"
                 copy_id="$2"
                 shift 2
                 ;;
             
             --info)
                 info_id="$2"
-                if [[ $# -lt 2 || "$2" == -* || -n "$2" ]]; then
-                    die "после --info требуется аргумент (номер)"
-                fi
+                [[ "$2" == -* || -z "$2" ]] && die "после --info требуется аргумент (номер)"
+                info_id="$2"
                 shift 2
                 ;;
             
             *)
-                print_msg r "Неизвестный аргумент: $1"
-                print_msg r "Используйте tips --help для просмотра справки"
-                exit 1
+                die "Неизвестный аргумент: $1\nИспользуйте tips --help для просмотра справки"
                 ;;
+            
         esac
     done
     
@@ -190,35 +136,19 @@ main() {
         exit 0
     fi
 
-    if [[ -n "$search_query" ]] || [[ -n "$filter_all_tags" ]] || [[ -n "$filter_any_tags" ]]; then
+    if [[ -n "$search_query$filter_all_tags$filter_any_tags" ]]; then
         search_tips "$search_query" "$filter_all_tags" "$filter_any_tags"
         exit 0
     fi
 
-    if [[ -n "$remove_tags_id" ]]; then
-        remove_tags "$remove_tags_id" "$remove_tags"
-        exit 0
-    fi
+    [[ -n "$remove_tags_id" ]] && { remove_tags "$remove_tags_id" "$remove_tags"; exit 0; }
+    [[ -n "$insert_id" ]]      && { insert_tip "$insert_id"; exit 0; }
+    [[ -n "$copy_id" ]]        && { copy_tip "$copy_id"; exit 0; }
+    [[ -n "$delete_id" ]]      && { delete_tip "$delete_id"; exit 0; }
+    [[ -n "$info_id" ]]        && { info_tip "$info_id"; exit 0; }
+    [[ -n "$edit_id" ]]        && { edit_tip "$edit_id" "$edit_field" "$edit_value"; exit 0; }
 
-    if [[ -n "$insert_id" ]]; then
-        insert_tip "$insert_id"
-        exit 0
-    fi
-
-    if [[ -n "$copy_id" ]]; then
-        copy_tip "$copy_id"
-        exit 0
-    fi
-    
-    if [[ -n "$delete_id" ]]; then
-        delete_tip "$delete_id"
-        exit 0
-    fi
-    
-    if [[ -n "$info_id" ]]; then
-        info_tip "$info_id"
-        exit 0
-    fi
+    die "Ничего не словил"
 }
 
 main "$@"
