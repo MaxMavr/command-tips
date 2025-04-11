@@ -20,6 +20,7 @@ main() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -l|--list)    list_tips; exit 0 ;;
+            --config)     print_config; exit 0 ;;
             --clear)      clear_tips; exit 0 ;;
             -v|--version) print_version; exit 0 ;;
             -h|--help)    print_help; exit 0 ;;

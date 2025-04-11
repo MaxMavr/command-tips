@@ -31,3 +31,10 @@ init_db() {
         touch "$DB_FILE"
     fi
 }
+
+check_db() {
+    if [ ! -s "$DB_FILE" ]; then
+        print_msg y "База данных пуста"
+        exit 0
+    fi
+}
