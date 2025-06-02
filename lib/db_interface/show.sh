@@ -32,6 +32,17 @@ list_tips() {
         echo -n "$TABLE_SEP"
         echo "${tagss[$i]}"
     done
+
+    # echo "$max_length_id"
+    # echo "$max_length_command"
+    # echo "$max_length_comment"
+
+    # for ((i=0; i<${#ids[@]}; i++)); do
+    #     printf "%-${max_length_id}s%s" "${ids[$i]}" "$TABLE_SEP"
+    #     printf "%-${max_length_command}s%s" "${commands[$i]}" "$TABLE_SEP"
+    #     printf "%-${max_length_comment}s%s" "${comments[$i]}" "$TABLE_SEP"
+    #     printf "%s\n" "${tagss[$i]}"
+    # done
 }
 
 info_tip() {

@@ -15,11 +15,8 @@ save_tip() {
 
     tags=$(echo "$tags" | sed -E 's/[[:space:]]*,[[:space:]]*/, /g; s/^[[:space:]]*,[[:space:]]*//; s/[[:space:]]*,[[:space:]]*$//')
 
-    echo "--- $id"
     id=${id:-$(get_free_id_db)}
-    echo "--- $id"
     id=${id:-$(( $(count_tips) + 1 ))}
-    echo "--- $id"
 
     declare -A tip=(
     ["id"]="$id"
